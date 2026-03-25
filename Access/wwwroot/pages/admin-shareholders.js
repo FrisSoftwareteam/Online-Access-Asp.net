@@ -66,24 +66,10 @@ KTUtil.onDOMContentLoaded((function () {
     page.init()
 }));
 
-var printButton = document.getElementById('bt_print');
-if (printButton) {
-    printButton.addEventListener('click', () => {
-        window.print();
-    });
-}
-
 var closeButton = document.getElementById('bt_close');
 if (closeButton) {
     closeButton.addEventListener('click', () => {
         switchBlock('v_list', 'v-block');
-    });
-}
-
-var printButtonDivi = document.getElementById('bt_print_dividends');
-if (printButtonDivi) {
-    printButtonDivi.addEventListener('click', () => {
-        window.print();
     });
 }
 
@@ -175,6 +161,7 @@ function setAccountStatement(json, url, reg, accno) {
     );
 
     $('#bt_export_acc').attr('href', `${url}/${reg}/${accno}/download`);
+    $('#bt_print').attr('href', `${url}/${reg}/${accno}/download`);
 }
 
 function setDividendHistory(json, url, reg, accno) {
@@ -216,5 +203,6 @@ function setDividendHistory(json, url, reg, accno) {
         );
     }
 
-    $('#bt_export_dividends').attr('href', `${url}/${reg}/${accno}/download`);
+    $('#bt_export_dividends').attr('href', `${url}/${reg}/${accno}/download-dividends`);
+    $('#bt_print_dividends').attr('href', `${url}/${reg}/${accno}/download-dividends`);
 }

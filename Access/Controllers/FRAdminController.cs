@@ -253,6 +253,38 @@ public class FRAdminController(ILogger<FRAdminController> logger, Service servic
                 }
         }
 
+        [HttpGet("shareholder/{regid?}/{accno?}/download-dividends")]
+        public async Task<IActionResult> DownloadDividendDetails(int regid, int accno)
+        {
+                try
+                {
+                        var sh = await GetShareholderDetailsModel(regid, accno);
+
+                        await LogAuditAction(AuditLogType.DownloadShareholder,
+                                $"{User.Identity.Name} downloaded dividend history of this account: RegCode={regid}, " +
+                                $"Account={accno}, Name={sh.FullName}, CHN={sh.ClearingNo}");
+
+                        var model = new RegisterHolderModel(sh);
+
+                        var logoPath = Path.Combine(env.WebRootPath, "images", "logo.jpeg");
+                        byte[] logoBytes = System.IO.File.Exists(logoPath) ? System.IO.File.ReadAllBytes(logoPath) : null;
+
+                        var pdfBytes = GenerateDividendPdf(model, logoBytes);
+
+                        return File(pdfBytes, "application/pdf", $"dividends-{accno}-{DateTime.Now:yyyyMMddHHmmss}.pdf");
+                }
+                catch (InvalidOperationException ex)
+                {
+                        logger.LogWarning($"Dividend history download lookup failed: {Clear.Tools.GetAllExceptionMessage(ex)};");
+                        return NotFound(ex.Message);
+                }
+                catch (Exception ex)
+                {
+                        logger.LogError($"Error: {Clear.Tools.GetAllExceptionMessage(ex)};");
+                        return StatusCode(StatusCodes.Status500InternalServerError, Clear.Tools.GetAllExceptionMessage(ex));
+                }
+        }
+
         [HttpGet("shareholder/{regid?}/{accno?}/download")]
         public async Task<IActionResult> DownloadShareholderDetails(int regid, int accno)
         {
@@ -455,6 +487,191 @@ public class FRAdminController(ILogger<FRAdminController> logger, Service servic
                                         {
                                                 footer.Item().Background(lightGray).Padding(10)
                                                         .Text("This certificate is computer-generated and issued by First Registrars & Investor Services Limited. " +
+                                                              "It is valid as at the date of issue and subject to the records maintained by the registrar.")
+                                                        .FontSize(7.5f).FontColor(textGray).Italic();
+                                        });
+                                });
+                        });
+                });
+
+                return doc.GeneratePdf();
+        }
+
+        private static byte[] GenerateDividendPdf(RegisterHolderModel model, byte[] logoBytes = null)
+        {
+                var navy = "#003C6E";
+                var gold = "#C49A2A";
+                var lightGray = "#F5F7FA";
+                var midGray = "#E2E8F0";
+                var textGray = "#64748B";
+
+                var doc = Document.Create(container =>
+                {
+                        container.Page(page =>
+                        {
+                                page.Size(PageSizes.A4);
+                                page.Margin(0);
+                                page.DefaultTextStyle(x => x.FontFamily("Arial").FontSize(9).FontColor("#1A1A2E"));
+
+                                page.Content().Column(col =>
+                                {
+                                        // ── HEADER ──────────────────────────────────────────
+                                        col.Item().Background(navy).Padding(28).Row(row =>
+                                        {
+                                                row.RelativeItem().Column(c =>
+                                                {
+                                                        c.Item().Text("First Registrars & Investor Services")
+                                                                .FontSize(16).Bold().FontColor(Colors.White);
+                                                        c.Item().PaddingTop(4).Text("DIVIDEND HISTORY")
+                                                                .FontSize(11).FontColor(gold).Bold().LetterSpacing(0.05f);
+                                                });
+                                                row.ConstantItem(130).AlignRight().Column(c =>
+                                                {
+                                                        if (logoBytes != null)
+                                                        {
+                                                                c.Item().AlignRight().Height(55).Image(logoBytes);
+                                                        }
+                                                        c.Item().PaddingTop(logoBytes != null ? 6 : 0).AlignRight().Column(d =>
+                                                        {
+                                                                d.Item().Text("Date Issued")
+                                                                        .FontSize(8).FontColor("#A0AEC0");
+                                                                d.Item().Text(DateTime.Now.ToString("dd MMM yyyy"))
+                                                                        .FontSize(11).Bold().FontColor(Colors.White);
+                                                        });
+                                                });
+                                        });
+
+                                        // ── GOLD DIVIDER ─────────────────────────────────────
+                                        col.Item().Height(4).Background(gold);
+
+                                        // ── SHAREHOLDER INFO ─────────────────────────────────
+                                        col.Item().Background(lightGray).Padding(24).Column(inner =>
+                                        {
+                                                inner.Item().PaddingBottom(12).Text("Shareholder Information")
+                                                        .FontSize(10).Bold().FontColor(navy);
+
+                                                inner.Item().Table(t =>
+                                                {
+                                                        t.ColumnsDefinition(c =>
+                                                        {
+                                                                c.RelativeColumn(1.2f);
+                                                                c.RelativeColumn(2f);
+                                                                c.RelativeColumn(1.2f);
+                                                                c.RelativeColumn(2f);
+                                                        });
+
+                                                        void InfoCell(string label, string value)
+                                                        {
+                                                                t.Cell().PaddingBottom(8).Column(c =>
+                                                                {
+                                                                        c.Item().Text(label).FontSize(7.5f).FontColor(textGray).Bold();
+                                                                        c.Item().PaddingTop(2).Text(value ?? "-").FontSize(9.5f).Bold().FontColor("#1A1A2E");
+                                                                });
+                                                        }
+
+                                                        InfoCell("Shareholder Name", model.Name?.ToUpper());
+                                                        InfoCell("Register", model.Register?.ToUpper());
+                                                        InfoCell("Account Number", model.AccountNo.ToString());
+                                                        InfoCell("CSCS / CHN Number", string.IsNullOrWhiteSpace(model.ClearingNo) ? "-" : model.ClearingNo);
+                                                        InfoCell("Email Address", string.IsNullOrWhiteSpace(model.Email) ? "-" : model.Email);
+                                                        InfoCell("Phone", string.IsNullOrWhiteSpace(model.Phone) ? (string.IsNullOrWhiteSpace(model.Mobile) ? "-" : model.Mobile) : model.Phone);
+                                                        InfoCell("Address", string.IsNullOrWhiteSpace(model.Address) ? "-" : model.Address);
+                                                        InfoCell("Total Dividends", model.Dividends.Count.ToString("N0"));
+                                                });
+                                        });
+
+                                        // ── SECTION HEADER ───────────────────────────────────
+                                        col.Item().PaddingHorizontal(24).PaddingVertical(12).Row(row =>
+                                        {
+                                                row.RelativeItem().Text("Dividend History")
+                                                        .FontSize(10).Bold().FontColor(navy);
+                                                row.ConstantItem(200).AlignRight()
+                                                        .Text($"{model.Dividends.Count} record(s)")
+                                                        .FontSize(8.5f).FontColor(textGray);
+                                        });
+
+                                        // ── DIVIDEND TABLE ────────────────────────────────────
+                                        col.Item().PaddingHorizontal(24).Table(t =>
+                                        {
+                                                t.ColumnsDefinition(c =>
+                                                {
+                                                        c.ConstantColumn(28);   // S/N
+                                                        c.RelativeColumn(1.4f); // Date
+                                                        c.RelativeColumn(1f);   // Div No
+                                                        c.RelativeColumn(1f);   // Warrant No
+                                                        c.RelativeColumn(1f);   // Type
+                                                        c.RelativeColumn(1.1f); // Units
+                                                        c.RelativeColumn(1.2f); // Gross
+                                                        c.RelativeColumn(1.1f); // Tax
+                                                        c.RelativeColumn(1.2f); // Net
+                                                });
+
+                                                void HeaderCell(string text, bool right = false)
+                                                {
+                                                        var cell = t.Cell().Background(navy).Padding(6);
+                                                        var aligned = right ? cell.AlignRight() : cell.AlignLeft();
+                                                        aligned.Text(text).FontSize(8).Bold().FontColor("#FFFFFF");
+                                                }
+
+                                                HeaderCell("S/N");
+                                                HeaderCell("Date");
+                                                HeaderCell("Div. No");
+                                                HeaderCell("Warr. No");
+                                                HeaderCell("Type");
+                                                HeaderCell("Units", true);
+                                                HeaderCell("Gross (₦)", true);
+                                                HeaderCell("Tax (₦)", true);
+                                                HeaderCell("Net (₦)", true);
+
+                                                int sn = 0;
+                                                decimal totalGross = 0, totalTax = 0, totalNet = 0;
+                                                var divs = model.Dividends.ToList();
+
+                                                for (int i = 0; i < divs.Count; i++)
+                                                {
+                                                        var div = divs[i];
+                                                        sn++;
+                                                        totalGross += div.Gross ?? 0;
+                                                        totalTax += div.Tax ?? 0;
+                                                        totalNet += div.Net ?? 0;
+
+                                                        var bg = i % 2 == 0 ? "#FFFFFF" : lightGray;
+
+                                                        void DataCell(string val, bool right = false, bool bold = false)
+                                                        {
+                                                                var cell = t.Cell().Background(bg).BorderBottom(0.5f).BorderColor(midGray).Padding(5);
+                                                                var aligned = right ? cell.AlignRight() : cell.AlignLeft();
+                                                                var txt = aligned.Text(val ?? "-").FontSize(8);
+                                                                if (bold) txt.Bold();
+                                                        }
+
+                                                        DataCell(sn.ToString());
+                                                        DataCell(div.Date ?? "-");
+                                                        DataCell(div.DividendNo > 0 ? div.DividendNo.ToString() : "-");
+                                                        DataCell(div.WarrantNo > 0 ? div.WarrantNo.ToString() : "-");
+                                                        DataCell(div.Type ?? "-");
+                                                        DataCell(div.Total.HasValue ? div.Total.Value.ToString("N0") : "-", right: true);
+                                                        DataCell(div.Gross.HasValue ? div.Gross.Value.ToString("N2") : "-", right: true);
+                                                        DataCell(div.Tax.HasValue ? div.Tax.Value.ToString("N2") : "-", right: true);
+                                                        DataCell(div.Net.HasValue ? div.Net.Value.ToString("N2") : "-", right: true, bold: true);
+                                                }
+
+                                                // Total row
+                                                t.Cell().ColumnSpan(6).Background(navy).Padding(6)
+                                                        .AlignRight().Text("Totals:").FontSize(8.5f).Bold().FontColor(Colors.White);
+                                                t.Cell().Background(navy).Padding(6)
+                                                        .AlignRight().Text(totalGross.ToString("N2")).FontSize(8.5f).Bold().FontColor(Colors.White);
+                                                t.Cell().Background(navy).Padding(6)
+                                                        .AlignRight().Text(totalTax.ToString("N2")).FontSize(8.5f).Bold().FontColor(Colors.White);
+                                                t.Cell().Background(gold).Padding(6)
+                                                        .AlignRight().Text(totalNet.ToString("N2")).FontSize(8.5f).Bold().FontColor(Colors.White);
+                                        });
+
+                                        // ── FOOTER ───────────────────────────────────────────
+                                        col.Item().PaddingTop(30).PaddingHorizontal(24).Column(footer =>
+                                        {
+                                                footer.Item().Background(lightGray).Padding(10)
+                                                        .Text("This document is computer-generated and issued by First Registrars & Investor Services Limited. " +
                                                               "It is valid as at the date of issue and subject to the records maintained by the registrar.")
                                                         .FontSize(7.5f).FontColor(textGray).Italic();
                                         });
