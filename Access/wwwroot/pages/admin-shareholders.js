@@ -13,6 +13,7 @@ var page = {
 
             const e = $(t).DataTable({
                 info: true,
+                dom: 'lrtip',
                 order: [1, 'asc'],
                 pageLength: 50,
                 lengthMenu: [[50, 100, 500, 1000, -1], [50, 100, 500, 1000, 'All']],
