@@ -2,6 +2,7 @@
 using FirstReg.Core;
 using FirstReg.Data;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +12,7 @@ using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -18,7 +20,7 @@ namespace FirstReg.OnlineAccess.Controllers;
 
 [Authorize]
 [Route("admin")]
-public class FRAdminController(ILogger<FRAdminController> logger, Service service, IApiClient apiClient, EStockApiUrl apiUrl, Mongo mongo)
+public class FRAdminController(ILogger<FRAdminController> logger, Service service, IApiClient apiClient, EStockApiUrl apiUrl, Mongo mongo, IWebHostEnvironment env)
         : BaseController(service, AuditLogSection.FrAdmin)
 {
         private async Task<RegSH> GetShareholderDetailsModel(int regid, int accno)
@@ -263,7 +265,11 @@ public class FRAdminController(ILogger<FRAdminController> logger, Service servic
                                 $"Account={accno}, Name={sh.FullName}, CHN={sh.ClearingNo}, Units={sh.TotalUnits}");
 
                         var model = new RegisterHolderModel(sh);
-                        var pdfBytes = GenerateCertificatePdf(model);
+
+                        var logoPath = Path.Combine(env.WebRootPath, "images", "logo.jpeg");
+                        byte[] logoBytes = System.IO.File.Exists(logoPath) ? System.IO.File.ReadAllBytes(logoPath) : null;
+
+                        var pdfBytes = GenerateCertificatePdf(model, logoBytes);
 
                         return File(pdfBytes, "application/pdf", $"certificate-{accno}-{DateTime.Now:yyyyMMddHHmmss}.pdf");
                 }
@@ -279,7 +285,7 @@ public class FRAdminController(ILogger<FRAdminController> logger, Service servic
                 }
         }
 
-        private static byte[] GenerateCertificatePdf(RegisterHolderModel model)
+        private static byte[] GenerateCertificatePdf(RegisterHolderModel model, byte[] logoBytes = null)
         {
                 var navy = "#1B3A6B";
                 var gold = "#C49A2A";
@@ -307,12 +313,19 @@ public class FRAdminController(ILogger<FRAdminController> logger, Service servic
                                                         c.Item().PaddingTop(4).Text("CERTIFICATE OF SHAREHOLDING")
                                                                 .FontSize(11).FontColor(gold).Bold().LetterSpacing(0.05f);
                                                 });
-                                                row.ConstantItem(120).AlignRight().AlignMiddle().Column(c =>
+                                                row.ConstantItem(130).AlignRight().Column(c =>
                                                 {
-                                                        c.Item().Text($"Date Issued")
-                                                                .FontSize(8).FontColor("#A0AEC0");
-                                                        c.Item().Text(DateTime.Now.ToString("dd MMM yyyy"))
-                                                                .FontSize(11).Bold().FontColor(Colors.White);
+                                                        if (logoBytes != null)
+                                                        {
+                                                                c.Item().AlignRight().Height(55).Image(logoBytes);
+                                                        }
+                                                        c.Item().PaddingTop(logoBytes != null ? 6 : 0).AlignRight().Column(d =>
+                                                        {
+                                                                d.Item().Text("Date Issued")
+                                                                        .FontSize(8).FontColor("#A0AEC0");
+                                                                d.Item().Text(DateTime.Now.ToString("dd MMM yyyy"))
+                                                                        .FontSize(11).Bold().FontColor(Colors.White);
+                                                        });
                                                 });
                                         });
 
