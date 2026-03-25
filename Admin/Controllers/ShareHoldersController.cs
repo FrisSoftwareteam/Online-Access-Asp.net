@@ -6,9 +6,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace FirstReg.Admin.Controllers
@@ -432,20 +432,29 @@ namespace FirstReg.Admin.Controllers
         {
             try
             {
-                StringBuilder sb = new($"SELECT * FROM vw_Shareholders WHERE (Id > 0) ");
+                IQueryable<Shareholder> query = _service.Data.GetAsQueryable<Shareholder>()
+                    .Include(x => x.User);
 
-                if (v != null) sb.Append($"AND (Verified = {Clear.Tools.StringUtility.SQLSerialize((bool)v)}) ");
-                if (v != null) sb.Append($"AND (ActionRequired = {Clear.Tools.StringUtility.SQLSerialize((bool)v)}) ");
-                if (s != null) sb.Append($"AND (ExpiryDate {(s == true ? ">" : "<")} GETDATE()) ");
+                if (v != null)
+                {
+                    query = query.Where(x => x.Verified == v.Value);
+                    if (v.Value == false)
+                        query = query.Where(x => x.ActionRequired == true);
+                }
 
-                var shs = await _service.Data.FromSql<ShareholderView>(sb.ToString());
+                if (s == true)
+                    query = query.Where(x => x.ExpiryDate > Tools.Now);
+                else if (s == false)
+                    query = query.Where(x => x.ExpiryDate == null || x.ExpiryDate < Tools.Now);
+
+                var shs = await query.OrderBy(x => x.FullName).ToListAsync();
 
                 return Ok(new
                 {
-                    data = shs.OrderBy(x => x.FullName).Select(x => new[]
+                    data = shs.Select(x => new[]
                     {
                         $"{x.FullName}<br>{x.Code}",
-                        $"{x.Email}<br>{$"{x.PrimaryPhone} {x.SecondaryPhone}".Trim()}".Trim(),
+                        $"{x.User.Email}<br>{$"{x.PrimaryPhone} {x.SecondaryPhone}".Trim()}".Trim(),
                         x.Verified ? "verified" : "pending",
                         x.IsSubscribed ? "active" : "expired",
                         x.Id.ToString(),
