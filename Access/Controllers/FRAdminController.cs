@@ -287,7 +287,7 @@ public class FRAdminController(ILogger<FRAdminController> logger, Service servic
 
         private static byte[] GenerateCertificatePdf(RegisterHolderModel model, byte[] logoBytes = null)
         {
-                var navy = "#1B3A6B";
+                var navy = "#003C6E";
                 var gold = "#C49A2A";
                 var lightGray = "#F5F7FA";
                 var midGray = "#E2E8F0";
