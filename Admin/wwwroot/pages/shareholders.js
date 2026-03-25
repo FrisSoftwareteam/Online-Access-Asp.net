@@ -9,13 +9,18 @@ var page = {
 
             const e = $(t).DataTable({
                 info: 1,
+                processing: true,
                 ajax: t.getAttribute('data-url'),
                 columnDefs: [{
                     targets: 4,
                     orderable: !1
                 }],
-                "oLanguage": {
-                    "sEmptyTable": `
+                language: {
+                    processing: `<div class="d-flex align-items-center gap-3 py-4">
+                        <span class="spinner-border spinner-border-sm text-primary" role="status"></span>
+                        <span class="text-muted fw-semibold">Loading shareholders...</span>
+                    </div>`,
+                    emptyTable: `
                         <div class="text-center p-15"><img src="/admin/img/illustrations/empty-cart.png" class="mh-100px">
                             <span class="font-weight-bold d-block">There are no records to show</span>
                         </div>`
