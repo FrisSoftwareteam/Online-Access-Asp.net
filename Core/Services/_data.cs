@@ -82,6 +82,9 @@ namespace FirstReg.Services
         public async Task ExecuteSql(string sql) =>
             await _db.Database.ExecuteSqlRawAsync(sql);
 
+        public IQueryable<T> SqlQuery<T>(FormattableString sql) =>
+            _db.Database.SqlQuery<T>(sql);
+
         #endregion
     }
 }

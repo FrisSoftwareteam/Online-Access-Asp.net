@@ -119,6 +119,36 @@ public class FRAdminController(ILogger<FRAdminController> logger, Service servic
                         });
                 }
 
+                if (!model.Dividends.Any())
+                {
+                        try
+                        {
+                                var accStr = holding.AccountNo;
+                                var sqlDivs = await service.Data
+                                        .SqlQuery<SDividendRow>($"SELECT Id, AccountNo, RegCode, Gross, Total, Net, DividendNo, Tax, WarrantNo, Type, Date FROM ___SDividends WHERE (AccountNo = {accStr} OR AccountNo = {model.AccountNo.ToString()}) AND RegCode = {regid}")
+                                        .ToListAsync();
+
+                                model.Dividends.AddRange(sqlDivs.Select(r => new Bson.Dividend
+                                {
+                                        Id = r.Id,
+                                        AccountNo = int.TryParse(r.AccountNo, out var parsedAcc) ? parsedAcc : 0,
+                                        RegCode = r.RegCode,
+                                        Gross = r.Gross,
+                                        Total = r.Total,
+                                        Net = r.Net,
+                                        DividendNo = r.DividendNo,
+                                        Tax = r.Tax,
+                                        WarrantNo = r.WarrantNo,
+                                        Type = r.Type,
+                                        Date = r.Date
+                                }));
+                        }
+                        catch (Exception ex)
+                        {
+                                logger.LogWarning($"SQL dividend fallback failed: {Clear.Tools.GetAllExceptionMessage(ex)}");
+                        }
+                }
+
                 return model;
         }
 
@@ -316,6 +346,9 @@ public class FRAdminController(ILogger<FRAdminController> logger, Service servic
                         return StatusCode(StatusCodes.Status500InternalServerError, Clear.Tools.GetAllExceptionMessage(ex));
                 }
         }
+
+        private record SDividendRow(int Id, string AccountNo, int RegCode, decimal? Gross, decimal? Total,
+                decimal? Net, int DividendNo, decimal? Tax, int WarrantNo, string Type, string Date);
 
         private static byte[] GenerateCertificatePdf(RegisterHolderModel model, byte[] logoBytes = null)
         {
